@@ -2,10 +2,10 @@ from BitVector import BitVector
 from info import Sbox, InvSbox, Mixer, InvMixer
 from roundkey import key_expansion, round_keys
 
-
 # Make Sbox and InvSbox 2D arrays
 Sbox = [Sbox[i:i + 16] for i in range(0, len(Sbox), 16)]
 InvSbox = [InvSbox[i:i + 16] for i in range(0, len(InvSbox), 16)]
+
 
 # Helper function to print the state matrix
 def print_matrix_hexvalue(matrix, label="Matrix"):
@@ -59,7 +59,7 @@ def sub_bytes(state_matrix):
     return state_matrix
 
 
-#Inverse substitute bytes using IInvSbox
+# Inverse substitute bytes using IInvSbox
 def inverse_sub_bytes(state_matrix):
     for i in range(4):
         for j in range(4):
@@ -103,7 +103,7 @@ def mix_columns(state_matrix):
     return new_matrix
 
 
-#inverse mix columns
+# inverse mix columns
 def inverse_mix_columns(state_matrix):
     modulus = BitVector(bitstring='100011011')
     new_matrix = [[BitVector(size=8) for _ in range(4)] for _ in range(4)]
@@ -124,13 +124,12 @@ def inverse_mix_columns(state_matrix):
 
 # AES encryption algorithm
 def aes_encryption_algo(key_matrix, state_matrix):
-    
     # Initial round key addition
     state_matrix = add_round_key(state_matrix, key_matrix)
 
     key_expansion(key_matrix)  # Key expansion to generate round keys
 
-    #round 1 to 9
+    # round 1 to 9
     for round in range(1, 10):  # 10 rounds for AES-128
         # SubBytes
         state_matrix = sub_bytes(state_matrix)
@@ -139,44 +138,45 @@ def aes_encryption_algo(key_matrix, state_matrix):
         # MixColumns
         state_matrix = mix_columns(state_matrix)
         # Add round key
-        round_key = round_keys[round] 
+        round_key = round_keys[round]
         state_matrix = add_round_key(state_matrix, round_key)
 
-    #final round (without MixColumns)
+    # final round (without MixColumns)
     # SubBytes
     state_matrix = sub_bytes(state_matrix)
-    #shift rows
+    # shift rows
     state_matrix = shift_rows(state_matrix)
-    #add round key
-    round_key = round_keys[10]  
+    # add round key
+    round_key = round_keys[10]
     state_matrix = add_round_key(state_matrix, round_key)
 
     return state_matrix
 
 
-def aes_decryption_algo(state_matrix):
-    #initial round key addition
-    round_key = round_keys[10] 
+def aes_decryption_algo(state_matrix, key_matrix):
+    key_expansion(key_matrix)  # Key expansion to generate round keys
+    # initial round key addition
+    round_key = round_keys[10]
     state_matrix = add_round_key(state_matrix, round_key)
 
-    #for loop 1 to 9 rounds
-    for round in range(9,0,-1):
+    # for loop 1 to 9 rounds
+    for round in range(9, 0, -1):
         # inverse shift rows
         state_matrix = inverse_shift_rows(state_matrix)
-        #inverse sub bytes
+        # inverse sub bytes
         state_matrix = inverse_sub_bytes(state_matrix)
-        #add round key
+        # add round key
         round_key = round_keys[round]
         state_matrix = add_round_key(state_matrix, round_key)
-        #inverse mix columns
+        # inverse mix columns
         state_matrix = inverse_mix_columns(state_matrix)
-        
-    #final round (without inverse mix columns)
-    #inverse shift rows
+
+    # final round (without inverse mix columns)
+    # inverse shift rows
     state_matrix = inverse_shift_rows(state_matrix)
-    #inverse sub bytes
+    # inverse sub bytes
     state_matrix = inverse_sub_bytes(state_matrix)
-    #add round key
+    # add round key
     round_key = round_keys[0]
     state_matrix = add_round_key(state_matrix, round_key)
 
@@ -207,8 +207,7 @@ def pkcs7_padding(plaintext_bv):
     return plaintext_bv
 
 
-def cbc_decryption(full_cipheredtext_bv,  iv_matrix):
-    print("in cbc decryption")
+def cbc_decryption(full_cipheredtext_bv, key_matrix, iv_matrix):
     decrypted_bv = BitVector(size=0)
     total_bits = full_cipheredtext_bv.length()
     block_size = 128
@@ -217,35 +216,33 @@ def cbc_decryption(full_cipheredtext_bv,  iv_matrix):
 
     for i in range(0, total_bits, block_size):
         cipher_block = full_cipheredtext_bv[i:i + block_size]
-        cipher_block = BitVector(hexstring=cipher_block.get_bitvector_in_hex()) 
+        cipher_block = BitVector(hexstring=cipher_block.get_bitvector_in_hex())
         state_matrix = make_four_by_four_matrix(cipher_block)
 
         # AES decryption
-        decrypted_matrix = aes_decryption_algo(state_matrix)
+        decrypted_matrix = aes_decryption_algo(state_matrix, key_matrix)
         # XOR with previous cipher block (or IV for the first block)
         for row in range(4):
             for col in range(4):
                 decrypted_matrix[row][col] ^= prev_cipher[row][col]
-    
+
         decrypted_bv += matrix_to_bitvector(decrypted_matrix)
         prev_cipher = make_four_by_four_matrix(cipher_block)
-      
+
     return decrypted_bv
 
 
 def cbc_encryption(plaintext_bv, key_matrix, iv_matrix):
-
     # CBC mode of operation
     # Initialize the IV (initialization vector) if not provided
-    prev_cipher = iv_matrix # stroing prev cypher as matrix 
+    prev_cipher = iv_matrix  # stroing prev cypher as matrix
     ciphertext_blocks = []
-
 
     for i in range(0, plaintext_bv.length(), 128):
         plaintext_block = plaintext_bv[i:i + 128]
         state_matrix = make_four_by_four_matrix(plaintext_block)
 
-        #CBC initial step XOR with IV
+        # CBC initial step XOR with IV
         for row in range(4):
             for col in range(4):
                 state_matrix[row][col] ^= prev_cipher[row][col]
@@ -256,7 +253,7 @@ def cbc_encryption(plaintext_bv, key_matrix, iv_matrix):
         ciphertext_blocks.append(cipher_block_bv)
         prev_cipher = encrypted_matrix
 
-    #combine ciphertext blocks into a single Bblocks
+    # combine ciphertext blocks into a single Bblocks
     full_ciphertext_bv = BitVector(size=0)
     for block in ciphertext_blocks:
         full_ciphertext_bv += block
@@ -264,8 +261,41 @@ def cbc_encryption(plaintext_bv, key_matrix, iv_matrix):
     return full_ciphertext_bv
 
 
+# alice input process
+def send_receive(input_plaintext=None, input_key=None, role=None):
+    input_key = input_key
+    key_bv = BitVector(textstring=input_key)
 
-# Input and processing function 
+    # key length handling
+    if key_bv.length() < 128:
+        key_bv += BitVector(size=128 - key_bv.length())
+    elif key_bv.length() > 128:
+        key_bv = key_bv[0:128]
+
+    key_matrix = make_four_by_four_matrix(key_bv)
+    iv = BitVector(intVal=0, size=128)
+    iv_matrix = make_four_by_four_matrix(iv)
+
+    if role == "Alice":
+        input_plaintext = input_plaintext
+        plaintext_bv = BitVector(textstring=input_plaintext)
+
+        # padding using PKCS7 padding
+        plaintext_bv = pkcs7_padding(plaintext_bv)
+
+        full_ciphertext_bv = cbc_encryption(plaintext_bv, key_matrix, iv_matrix)
+
+        return full_ciphertext_bv
+
+    else:
+        decrypted_bv = cbc_decryption(input_plaintext, key_matrix, iv_matrix)
+        decrypted_bv = remove_pkcs7_padding(decrypted_bv)
+        decrypted_text = decrypted_bv.get_text_from_bitvector()
+
+        return decrypted_text
+
+
+# Input and processing function
 def input_process():
     input_key = input("Key: ")
     key_bv = BitVector(textstring=input_key)
@@ -277,30 +307,27 @@ def input_process():
     print("In ASCII: ", input_plaintext)
     print("In hex: ", plaintext_bv.get_bitvector_in_hex().upper())
 
-    #key length handling
+    # key length handling
     if key_bv.length() < 128:
-        key_bv += BitVector( size = 128 - key_bv.length() )
+        key_bv += BitVector(size=128 - key_bv.length())
     elif key_bv.length() > 128:
         key_bv = key_bv[0:128]
-
 
     key_matrix = make_four_by_four_matrix(key_bv)
     iv = BitVector(intVal=0, size=128)
     iv_matrix = make_four_by_four_matrix(iv)
 
-
-    #padding using PKCS7 padding
+    # padding using PKCS7 padding
     plaintext_bv = pkcs7_padding(plaintext_bv)
     print("In ASCII (After Padding): ", plaintext_bv.get_text_from_bitvector())
     print("In hex (After Padding): ", plaintext_bv.get_bitvector_in_hex().upper())
-    
 
     full_ciphertext_bv = cbc_encryption(plaintext_bv, key_matrix, iv_matrix)
     print("Ciphered Text:")
     print("In Hex: ", full_ciphertext_bv.get_bitvector_in_hex().upper())
-    #print("In ASCII: ", full_ciphertext_bv.get_text_from_bitvector())
+    print("In ASCII: ", full_ciphertext_bv.get_text_from_bitvector())
 
-    decrypted_bv = cbc_decryption(full_ciphertext_bv, iv_matrix)
+    decrypted_bv = cbc_decryption(full_ciphertext_bv,key_matrix, iv_matrix)
     print("Decrypted Text:")
     print("Before Unpadding:")
     print("In Hex)", decrypted_bv.get_bitvector_in_hex().upper())
@@ -311,7 +338,7 @@ def input_process():
     print("After Unpadding:")
     print("In ASCII)", decrypted_bv.get_text_from_bitvector())
     print("In Hex", decrypted_bv.get_bitvector_in_hex().upper())
-   
+
 
 # Main function
 def main():
