@@ -8,16 +8,28 @@ const TIME = 10000;
 const P = 10; 
 
 function sweep(P) {
-    /*
-     * Implement this function to run a sweep of the cache.
-     * 1. Allocate a buffer of size LLCSIZE.
-     * 2. Read each cache line (read the buffer in steps of LINESIZE).
-     * 3. Count the number of times each cache line is read in a time period of P milliseconds.
-     * 4. Store the count in an array of size K, where K = TIME / P.
-     * 5. Return the array of counts.
-     */
-}   
+  const K = TIME / P;
+  const counts = new Array(K).fill(0);
+  const buffer = new Uint8Array(LLCSIZE);
+  const num_lines = LLCSIZE / LINESIZE;
 
-self.addEventListener('message', function(e) {
-    /* Call the sweep function and return the result */
+  for (let k = 0; k < K; k++) {
+    const start = performance.now();
+    let sweep_counts = 0;
+    while (performance.now() - start < P) {
+      for (let i = 0; i < num_lines; i++) {
+        const temp = buffer[i * LINESIZE];
+      }
+      sweep_counts++;
+    }
+    counts[k] = sweep_counts;
+  }
+  return counts;
+}
+
+self.addEventListener("message", function (e) {
+  if (e.data.command === "start") {
+    const trace = sweep(P);
+    self.postMessage({ status: "complete", trace: trace });
+  }
 });

@@ -1,73 +1,125 @@
-function app() {
-  return {
-    /* This is the main app object containing all the application state and methods. */
-    // The following properties are used to store the state of the application
-
-    // results of cache latency measurements
-    latencyResults: null,
-    // local collection of trace data
-    traceData: [],
-    // Local collection of heapmap images
-    heatmaps: [],
-
-    // Current status message
-    status: "",
-    // Is any worker running?
+document.addEventListener("alpine:init", () => {
+  window.Alpine.store("app", {
+    // Shared state
     isCollecting: false,
-    // Is the status message an error?
+    status: "",
     statusIsError: false,
-    // Show trace data in the UI?
-    showingTraces: false,
+    
+    // Task 1: Latency Collection
+    latencyData: [],
+    latencyWorker: null,
+    
+    // Task 2: Trace Collection
+    traces: [],
+    traceWorker: null,
 
-    // Collect latency data using warmup.js worker
-    async collectLatencyData() {
-      this.latencyData = [];
+    // --- Methods ---
+    
+    // Task 1 Method
+    collectLatencyData() {
       this.isCollecting = true;
-      this.worker.postMessage({ command: "start" });
+      this.status = "Collecting latency data...";
+      this.latencyData = [];
+      this.latencyWorker.postMessage({ command: "start" });
     },
 
-    init() {
-      this.worker = new Worker("warmup.js");
-      this.worker.onmessage = (e) => {
-        if (e.data.status === "progress" || e.data.status === "complete") {
-          this.latencyData = e.data.results;
+    // Task 2 Methods
+    collectTraceData() {
+      this.isCollecting = true;
+      this.status = "Collecting trace data (this will take 10 seconds)...";
+      this.traceWorker.postMessage({ command: "start" });
+    },
+
+    async clearResults() {
+      this.status = "Clearing results...";
+      try {
+        const response = await fetch("/clear_results", { method: "POST" });
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to clear results.");
         }
-        if (e.data.status === "complete") {
+        this.traces = [];
+        this.latencyData = [];
+        this.status = "Results cleared successfully.";
+      } catch (error) {
+        this.status = `Error: ${error.message}`;
+        this.statusIsError = true;
+      }
+    },
+
+    downloadTraces() {
+        this.status = "Downloading traces...";
+        fetch('/download_traces')
+            .then(resp => resp.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'traces.json';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                this.status = "Traces downloaded.";
+            })
+            .catch(() => {
+                this.status = `Error: Could not download traces.`;
+                this.statusIsError = true;
+            });
+    },
+
+    async fetchResults() {
+      try {
+        const response = await fetch("/get_results");
+        if (!response.ok) return;
+        const data = await response.json();
+        this.traces = data.traces;
+      } catch (error) {
+        console.log("Could not fetch initial results.");
+      }
+    },
+    
+    // --- Initialization ---
+    init() {
+      // Init worker for Task 1
+      this.latencyWorker = new Worker("warmup.js");
+      this.latencyWorker.onmessage = (e) => {
+        if (e.data.status === "progress") {
+          this.latencyData = e.data.results;
+        } else if (e.data.status === "complete") {
+          this.latencyData = e.data.results;
           this.isCollecting = false;
+          this.status = "Latency collection complete.";
         }
       };
-    },
 
-    // Collect trace data using worker.js and send to backend
-    async collectTraceData() {
-       /* 
-        * Implement this function to collect trace data.
-        * 1. Create a worker to run the sweep function.
-        * 2. Collect the trace data from the worker.
-        * 3. Send the trace data to the backend for temporary storage and heatmap generation.
-        * 4. Fetch the heatmap from the backend and add it to the local collection.
-        * 5. Handle errors and update the status.
-        */
-    },
+      // Init worker for Task 2
+      this.traceWorker = new Worker("worker.js");
+      this.traceWorker.onmessage = async (e) => {
+        if (e.data.status === "complete") {
+          this.status = "Trace collected. Generating heatmap...";
+          try {
+            const response = await fetch("/collect_trace", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ trace: e.data.trace }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to process trace.");
+            
+            this.traces.push(result);
+            this.status = "Heatmap generated successfully.";
 
-    // Download the trace data as JSON (array of arrays format for ML)
-    async downloadTraces() {
-       /* 
-        * Implement this function to download the trace data.
-        * 1. Fetch the latest data from the backend API.
-        * 2. Create a download file with the trace data in JSON format.
-        * 3. Handle errors and update the status.
-        */
+          } catch (error) {
+            this.status = `Error: ${error.message}`;
+            this.statusIsError = true;
+          } finally {
+            this.isCollecting = false;
+          }
+        }
+      };
+      
+      this.fetchResults();
     },
-
-    // Clear all results from the server
-    async clearResults() {
-      /* 
-       * Implement this function to clear all results from the server.
-       * 1. Send a request to the backend API to clear all results.
-       * 2. Clear local copies of trace data and heatmaps.
-       * 3. Handle errors and update the status.
-       */
-    },
-  };
-}
+  });
+});
