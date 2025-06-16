@@ -24,10 +24,42 @@ document.addEventListener("alpine:init", () => {
     },
 
     // Task 2 Methods
-    collectTraceData() {
+    collectTraceData(label = "unknown", site_idx = -1) {
       this.isCollecting = true;
-      this.status = "Collecting trace data (this will take 10 seconds)...";
+      this.status = `Collecting trace for: ${label}...`;
       this.traceWorker.postMessage({ command: "start" });
+      
+      // We need to override the worker's onmessage for this one-off collection
+      // to include the label
+      this.traceWorker.onmessage = async (e) => {
+        if (e.data.status === "complete") {
+          this.status = "Trace collected. Saving to database...";
+          try {
+            const response = await fetch("/collect_trace", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                trace: e.data.trace,
+                label: label,
+                site_idx: site_idx 
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to process trace.");
+            
+            // We don't push to the local traces array anymore,
+            // as the collect script manages the database state.
+            // We just show a success message.
+            this.status = `Successfully saved trace for ${label}.`;
+
+          } catch (error) {
+            this.status = `Error: ${error.message}`;
+            this.statusIsError = true;
+          } finally {
+            this.isCollecting = false;
+          }
+        }
+      };
     },
 
     async clearResults() {
@@ -95,29 +127,7 @@ document.addEventListener("alpine:init", () => {
 
       // Init worker for Task 2
       this.traceWorker = new Worker("worker.js");
-      this.traceWorker.onmessage = async (e) => {
-        if (e.data.status === "complete") {
-          this.status = "Trace collected. Generating heatmap...";
-          try {
-            const response = await fetch("/collect_trace", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ trace: e.data.trace }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || "Failed to process trace.");
-            
-            this.traces.push(result);
-            this.status = "Heatmap generated successfully.";
-
-          } catch (error) {
-            this.status = `Error: ${error.message}`;
-            this.statusIsError = true;
-          } finally {
-            this.isCollecting = false;
-          }
-        }
-      };
+      // The default onmessage handler is now set inside collectTraceData
       
       this.fetchResults();
     },
