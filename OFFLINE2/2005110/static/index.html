@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Fingerprinting</title>
+    <!-- Pico CSS - minimal CSS framework -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <!-- Alpine.js - minimal reactive framework -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        body {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .results-table {
+            margin: 0 auto;
+            width: 100%;
+        }        
+    </style>
+</head>
+<body>
+    <main class="container" x-data x-init="$store.app.init()">
+        <h1>CSE406: Website Fingerprinting</h1>
+        
+        <div class="button-group">
+            <button @click="$store.app.collectLatencyData()" :disabled="$store.app.isCollecting">Collect Latency Data</button>
+            <button @click="$store.app.collectTraceData()" :disabled="$store.app.isCollecting">Collect trace</button>
+            <button @click="$store.app.downloadTraces()" :disabled="$store.app.traces.length === 0">Download traces</button>
+            <button @click="$store.app.fetchResults()" :disabled="$store.app.isCollecting">Refresh results</button>
+            <button @click="$store.app.clearResults()" :disabled="$store.app.traces.length === 0">Clear all results</button>
+        </div>
+        
+        <div x-show="$store.app.status" role="alert" x-text="$store.app.status" 
+             :class="{'alert-success': !$store.app.statusIsError, 'alert-error': $store.app.statusIsError}"></div>
+        
+        <!-- Latency Results Table -->
+        <template x-if="$store.app.latencyData.length > 0">
+            <div class="results-container">
+                <h3>Latency Results</h3>
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>N (Number of Cache Lines)</th>
+                            <th>Median Access Latency (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="result in $store.app.latencyData" :key="result.n">
+                            <tr>
+                                <td x-text="result.n"></td>
+                                <td x-text="result.time.toFixed(4)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+        
+        <!-- Heatmap gallery for all traces -->
+        <template x-if="$store.app.traces.length > 0">
+            <div class="results-container">
+                <h2>Trace Heatmaps</h2>
+                <p>Trace data collected and visualized using matplotlib.</p>
+                <template x-for="trace in $store.app.traces" :key="trace.id">
+                    <figure>
+                        <img :src="trace.img" :alt="'Trace ' + trace.id" style="border: 1px solid grey;">
+                        <figcaption x-text="`Min: ${trace.stats.min}, Max: ${trace.stats.max}, Range: ${trace.stats.range}, Samples: ${trace.stats.samples}`"></figcaption>
+                    </figure>
+                </template>
+            </div>
+        </template>
+    </main>
+
+    <script src="index.js"></script>
+</body>
+</html>
